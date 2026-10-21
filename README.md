@@ -276,13 +276,5 @@ sh calc-tests/cli.sh ./calc           # command-line tests (grade 9)</pre>
 term    := power { ('*' | '/') power }
 power   := primary [ '**' power ]
 primary := NUMBER | '(' expr ')'</pre>
-<h3 id="calc-submit" style="margin: 28px 0 8px 0; padding-bottom: 4px; border-bottom: 2px solid #d0d4d9;">9. Submit</h3>
-<p>Commit and push regularly. Your commit history is part of the evidence that the work is your own.</p>
-<p>Before the deadline:</p>
-<ol>
-<li>Push your last commit.</li>
-<li>On github.com, open your repository, click the latest commit above the file list, and copy the page address:<br><code style="background: #f3f5f7; color: #1d2125; padding: 1px 4px; border-radius: 3px; font-family: Consolas,Menlo,monospace; font-size: 0.92em;"><a href="https://github.com/&lt;your-username&gt;/calc-lab-home/commit/&lt;long-hash&gt;" class="_blanktarget">https://github.com/&lt;your-username&gt;/calc-lab-home/commit/&lt;long-hash&gt;</a>;</code></li>
-<li>Submit that <strong>commit link</strong>.</li>
-</ol>
-<p>Only the commit you submit is graded.</p>
-</div></div>
+
+
