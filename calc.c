@@ -21,6 +21,7 @@ typedef struct {
     size_t error_pos;
     size_t line_end_pos;
     long long value;
+    int missing_close;
 } Parser;
 
 static void skip_spaces(Parser *p)
@@ -64,11 +65,12 @@ static int parse_number(Parser *p, long long *result)
  * This stage uses integer arithmetic; parentheses and powers
  * will be added in later stages.
  */
+static int parse_primary(Parser *p, long long *result);
 static int parse_term(Parser *p, long long *result)
 {
     long long value;
 
-    if (!parse_number(p, &value)) {
+    if (!parse_primary(p, &value)) {
         return 0;
     }
 
@@ -94,7 +96,7 @@ static int parse_term(Parser *p, long long *result)
         size_t right_start = p->pos;
         long long right;
 
-        if (!parse_number(p, &right)) {
+        if (!parse_primary(p, &right)) {
             return 0;
         }
 
@@ -131,8 +133,11 @@ static int parse_expression(Parser *p, long long *result)
             *result = value;
             return 1;
         }
-
         char op = p->text[p->pos];
+        if (op == ')') {
+            *result = value;
+            return 1;
+        }
 
         if (op != '+' && op != '-') {
             p->error_pos = p->pos + 1;
@@ -153,7 +158,41 @@ static int parse_expression(Parser *p, long long *result)
         }
     }
 }
+static int parse_primary(Parser *p, long long *result)
+{
+    skip_spaces(p);
 
+    if (p->pos >= p->end) {
+        p->error_pos = p->line_end_pos;
+        return 0;
+    }
+
+    if (p->text[p->pos] == '(') {
+        p->pos++;
+
+        if (!parse_expression(p, result)) {
+            return 0;
+        }
+
+        skip_spaces(p);
+
+        if (p->pos >= p->end) {
+            p->error_pos = p->line_end_pos;
+            p->missing_close = 1;
+            return 0;
+        }
+
+        if (p->text[p->pos] != ')') {
+            p->error_pos = p->pos + 1;
+            return 0;
+        }
+
+        p->pos++;
+        return 1;
+    }
+
+    return parse_number(p, result);
+}
 
 static int evaluate_line(const char *text,
                          size_t start,
@@ -162,7 +201,7 @@ static int evaluate_line(const char *text,
                          long long *result,
                          size_t *error_pos)
 {
-    Parser p = {text, start, end, 0, line_end_pos, 0};
+    Parser p = {text, start, end, 0, line_end_pos, 0,0};
 
     skip_spaces(&p);
 
@@ -173,6 +212,12 @@ static int evaluate_line(const char *text,
 
     if (!parse_expression(&p, result)) {
         *error_pos = p.error_pos;
+        return 0;
+    }
+    skip_spaces(&p);
+
+    if (p.pos < p.end) {
+        *error_pos = p.pos + 1;
         return 0;
     }
 
