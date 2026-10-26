@@ -57,12 +57,70 @@ static int parse_number(Parser *p, long long *result)
     return 1;
 }
 
-/* Addition and subtraction are processed left to right. */
-static int parse_expression(Parser *p, long long *result)
+
+/*
+ * Multiplication and division are grouped in parse_term().
+ * This makes them bind more tightly than + and -.
+ * This stage uses integer arithmetic; parentheses and powers
+ * will be added in later stages.
+ */
+static int parse_term(Parser *p, long long *result)
 {
     long long value;
 
     if (!parse_number(p, &value)) {
+        return 0;
+    }
+
+    for (;;) {
+        skip_spaces(p);
+
+        if (p->pos >= p->end) {
+            *result = value;
+            return 1;
+        }
+
+        char op = p->text[p->pos];
+
+        if (op != '*' && op != '/') {
+            *result = value;
+            return 1;
+        }
+
+        p->pos++;
+        skip_spaces(p);
+
+        /* Division by zero is reported at the right operand. */
+        size_t right_start = p->pos;
+        long long right;
+
+        if (!parse_number(p, &right)) {
+            return 0;
+        }
+
+        if (op == '/' && right == 0) {
+            p->error_pos = right_start + 1;
+            return 0;
+        }
+
+        if (op == '*') {
+            value *= right;
+        } else {
+            value /= right;
+        }
+    }
+}
+
+/*
+ * Addition and subtraction call parse_term(), so each multiplication
+ * or division is evaluated before the surrounding + or - operation.
+ * The loop also preserves left-to-right evaluation at this level.
+ */
+static int parse_expression(Parser *p, long long *result)
+{
+    long long value;
+
+    if (!parse_term(p, &value)) {
         return 0;
     }
 
@@ -84,7 +142,7 @@ static int parse_expression(Parser *p, long long *result)
         p->pos++;
 
         long long right;
-        if (!parse_number(p, &right)) {
+        if (!parse_term(p, &right)) {
             return 0;
         }
 
@@ -95,6 +153,7 @@ static int parse_expression(Parser *p, long long *result)
         }
     }
 }
+
 
 static int evaluate_line(const char *text,
                          size_t start,
@@ -119,7 +178,7 @@ static int evaluate_line(const char *text,
 
     return 1;
 }
-
+//reading file
 static char *read_file(FILE *file, size_t *length)
 {
     size_t capacity = 4096;
