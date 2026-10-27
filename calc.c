@@ -213,40 +213,29 @@ static int parse_expression(Parser *p, long long *result)
         }
     }
 }
-static int parse_primary(Parser *p, long long *result)
-{
+static int parse_primary(Parser *p, Value *out){
     s_skipper(p);
 
-    if (p->pos >= p->end) {
-        p->error_pos = p->line_end_pos;
-        return 0;
-    }
+    if (p->pos >= p->end)
+        return fail_at(p, p->line_end);
 
-    if (p->text[p->pos] == '(') {
+    if (p->s[p->pos] == '(') {
         p->pos++;
+        skip_space(p);
+        if (p->pos < p->end && p->s[p->pos] == ')')
+            return fail_at(p, p->pos + 1);
 
-        if (!parse_expression(p, result)) {
+        if (!parse_expr(p, out))
             return 0;
-        }
-
-        s_skipper(p);
-
-        if (p->pos >= p->end) {
-            p->error_pos = p->line_end_pos;
-            p->missing_close = 1;
-            return 0;
-        }
-
-        if (p->text[p->pos] != ')') {
-            p->error_pos = p->pos + 1;
-            return 0;
-        }
-
+        skip_space(p);
+        if (p->pos >= p->end)
+            return fail_at(p, p->line_end);
+        if (p->s[p->pos] != ')')
+            return fail_at(p, p->pos + 1);
         p->pos++;
         return 1;
     }
-
-    return number_parser(p, result);
+    return parse_number(p, out);
 }
 
 
