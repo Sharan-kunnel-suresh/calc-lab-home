@@ -391,6 +391,16 @@ static int append_text(Output *o, const char *s, size_t n){
     o->data[o->len] = '\0';
     return 1
 }
+static int append_result(Output *o, Value v){
+    char buf[128];
+    int n;
+    if (v.is_float)
+        n = snprintf(buf, sizeof buf, "%.15g\n", v.d);
+    else
+        n = snprintf(buf, sizeof buf, "%lld\n", v.i);
+    return n >= 0 && (size_t)n < sizeof buf &&
+           append_text(o, buf, (size_t)n);
+}
 int main(int argc, char **argv)
 {
     if (argc != 2) {
