@@ -402,28 +402,24 @@ static int append_result(Output *o, Value v){
            append_text(o, buf, (size_t)n);
 }
 //used chatgpt
-static int process_input(const char *path, const char *outpath){
-    FILE *in =fopen(path,"rb");
-    if (!in){
-        fprintf(stderr,"Cannot open the input file;%s\n",path);
+static int process_input(const char *path, const char *outpath)
+{
+    FILE *in = fopen(path, "rb");
+    if (!in) {
+        fprintf(stderr, "Cannot open input file: %s\n", path);
         return 0;
     }
-    size_t length=0;
+    size_t length = 0;
     char *text = read_file(in, &length);
     fclose(in);
     if (!text) {
         fprintf(stderr, "Cannot read input file: %s\n", path);
         return 0;
     }
-    char *text = read_file(in, &length);
-    fclose(in);
-    if (!text) {
-        fprintf(stderr, "Cannot read input file: %s\n", path);
-        return 0;
-    }
-    Output output= {NULL,0,0};
-    size_t start=0;
-    size_t global_error=0;
+
+    Output output = {NULL, 0, 0};
+    size_t start = 0;
+    size_t global_error = 0;
     while (start < length) {
         size_t end = start;
         while (end < length && text[end] != '\n')
@@ -480,68 +476,4 @@ static int process_input(const char *path, const char *outpath){
     free(output.data);
     free(text);
     return ok;
-}
-int main(int argc, char **argv)
-{
-    if (argc != 2) {
-        fprintf(stderr, "Usage: calc input.txt\n");
-        return 1;
-    }
-
-    FILE *file = fopen(argv[1], "rb");
-
-    if (file == NULL) {
-        fprintf(stderr, "Cannot open input file\n");
-        return 1;
-    }
-
-    size_t length;
-    char *text = read_file(file, &length);
-    fclose(file);
-
-    if (text == NULL) {
-        fprintf(stderr, "Cannot read input file\n");
-        return 1;
-    }
-
-    size_t start = 0;
-
-    while (start < length) {
-        size_t end = start;
-
-        while (end < length && text[end] != '\n') {
-            end++;
-        }
-
-        size_t line_end_pos = end + 1;
-        size_t content_end = end;
-
-        if (content_end > start &&
-            text[content_end - 1] == '\r') {
-            content_end--;
-        }
-
-        long long result;
-        size_t error_pos = 0;
-
-        int status = evaluate_line(
-            text, start, content_end, line_end_pos,
-            &result, &error_pos
-        );
-
-        if (status == 0) {
-            printf("ERROR:%zu\n", error_pos);
-            free(text);
-            return 0;
-        }
-
-        if (status == 1) {
-            printf("%lld\n", result);
-        }
-
-        start = end < length ? end + 1 : end;
-    }
-
-    free(text);
-    return 0;
 }
