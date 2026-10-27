@@ -121,15 +121,17 @@ static int number_parser(Parser *p, Value *out)
  */
 static int parse_primary(Parser *p, long long *result);
 static int parsein_power(Parser *p, long long *result);
-static int parse_term(Parser *p, long long *result)
-{
-    long long value;
+static int parse_term(Parser *p, Value *out){
+    Value value;
 
     if (!parsein_power(p, &value)) {
         return 0;
     }
 
     for (;;) {
+        char op;
+        size_t op_pos, right_start;
+        Value right;
         s_skipper(p);
 
         if (p->pos >= p->end) {
@@ -240,45 +242,46 @@ static int parse_primary(Parser *p, Value *out){
 
 
 //adding the powerr function d
-static int parsein_power(Parser *p, long long *result)
+//edited according to use "Value" 
+static int parsein_power(Parser *p, Value  *out)
 {
-    long long base;
+    Value base, exponent;
+    size_t op_pos;
 
-    if (!parse_primary(p, &base)) {
+    if (!parse_primary(p, &base))
         return 0;
-    }
-
-    s_skipper(p);
-
+    skip_space(p);
     if (p->pos + 1 >= p->end ||
-        p->text[p->pos] != '*' ||
-        p->text[p->pos + 1] != '*') {
-        *result = base;
+        p->s[p->pos] != '*' || p->s[p->pos + 1] != '*') {
+        *out = base;
         return 1;
     }
 
+    op_pos = p->pos;
     p->pos += 2;
-    s_skipper(p);
-
+    skip_space(p);
     size_t exponent_start = p->pos;
-    long long exponent;
 
-    if (!parsein_power(p, &exponent)) {
+    if (!parsein_power(p, &exponent))
         return 0;
+
+    if (!base.is_float && !exponent.is_float) {
+        if (exponent.i < 0)
+            return fail_at(p, exponent_start < p->end ?
+                           exponent_start + 1 : p->line_end);
+        long long result = 1;
+        for (long long k = 0; k < exponent.i; k++)
+            result *= base.i;
+        *out = int_value(result);
+        return 1;
     }
 
-    if (exponent < 0) {
-        p->error_pos = exponent_start + 1;
-        return 0;
-    }
-
-    long long value = 1;
-
-    for (long long i = 0; i < exponent; i++) {
-        value *= base;
-    }
-
-    *result = value;
+    double b = base.is_float ? base.d : (double)base.i;
+    double e = exponent.is_float ? exponent.d : (double)exponent.i;
+    double result = pow(b, e);
+    if (!isfinite(result))
+        return fail_at(p, op_pos + 1);
+    *out = float_value(result);
     return 1;
 }
 
