@@ -6,9 +6,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <math.h>
 #include <ctype.h>
-
+#include <dirent.h>
+#include <sys/stat.h>
 // Used chat gpt to research structure that is need ed to do float 
 typedef struct{
     long long integer;
@@ -17,13 +18,9 @@ typedef struct{
 
 }Value;
 typedef struct {
-    const char *text;
-    size_t pos;
-    size_t end;
-    size_t error_pos;
-    size_t line_end_pos;
-    long long value;
-    int missing_close;
+    const char *s;
+    size_t pos, end, line_end;
+    size_t error;
 } Parser;
 
 static void s_skipper(Parser *p){
@@ -35,28 +32,84 @@ static void s_skipper(Parser *p){
     }
 }
 
-static int number_parser(Parser *p, long long *result)
+
+static Value int_value(long long x){
+    Value v;
+    v.i=x;
+    v.is_float=0;
+    return v;
+}
+static Value int_value(long long x){
+    Value v;
+    v.i=x;
+    v.d=(double)x;
+    v.is_float=0;
+    return v;
+}
+// referred Chatgpt for this code snippet 
+static Value float_value(double x)
 {
+    Value v;
+    v.i = 0;
+    v.d = x;
+    v.is_float = 1;
+    return v;
+}
+
+static int fail_at(Parser *p, size_t pos)
+{
+    p->error = pos;
+    return 0;
+}
+
+static int parse_expr(Parser *p, Value *out);
+// till here  
+static int number_parser(Parser *p, Value *out)
+{
+    size_t start;
+    int before = 0, after = 0;
+    long long integer = 0;
+    double number = 0.0;
+    double fraction_scale = 0.1;
     s_skipper(p);
 
-    if (p->pos >= p->end ||
-        !isdigit((unsigned char)p->text[p->pos])) {
-        p->error_pos = p->pos < p->end
-                       ? p->pos + 1
-                       : p->line_end_pos;
-        return 0;
+    start = p->pos;
+
+    if (p->pos >= p->end)
+        return fail_at(p, p->line_end);
+
+    if (!isdigit((unsigned char)p->s[p->pos])) {
+        return fail_at(p, p->pos + 1);
     }
 
-    long long number = 0;
-
     while (p->pos < p->end &&
-           isdigit((unsigned char)p->text[p->pos])) {
-        number = number * 10 + (p->text[p->pos] - '0');
+           isdigit((unsigned char)p->s[p->pos])) {
+        int digit = p->s[p->pos] - '0';
+        before = 1;
+        number = number * 10.0 + (double)digit;
+        integer = integer * 10 + digit;
         p->pos++;
     }
 
-    *result = number;
-    return 1;
+    if (p->pos < p->end && p->s[p->pos] == '.') {
+        p->pos++;
+        while (p->pos < p->end &&
+               isdigit((unsigned char)p->s[p->pos])) {
+            int digit = p->s[p->pos] - '0';
+            after = 1;
+            number += (double)digit * fraction_scale;
+            fraction_scale *= 0.1;
+            p->pos++;
+        }
+        if (!before || !after)
+            return fail_at(p, p->pos < p->end ? p->pos : p->line_end);
+        if (p->pos < p->end &&
+            (p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
+            return fail_at(p, p->pos + 1);
+        if (!isfinite(number))
+            return fail_at(p, start + 1);
+        *out = float_value(number);
+        return 1;
 }
 
 
