@@ -477,3 +477,59 @@ static int process_input(const char *path, const char *outpath)
     free(text);
     return ok;
 }
+
+static int make_dir_if_needed(const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) == 0)
+        return S_ISDIR(st.st_mode);
+    if (mkdir(path, 0777) == 0)
+        return 1;
+    return 0;
+}
+
+static char *join_path(const char *a, const char *b)
+{
+    size_t na = strlen(a), nb = strlen(b);
+    int slash = na > 0 && a[na - 1] != '/';
+    if (na > (size_t)-1 - nb - (size_t)slash - 1)
+        return NULL;
+    char *p = malloc(na + nb + (size_t)slash + 1);
+    if (!p)
+        return NULL;
+    memcpy(p, a, na);
+    size_t at = na;
+    if (slash)
+        p[at++] = '/';
+    memcpy(p + at, b, nb + 1);
+    return p;
+}
+
+static char *base_name(const char *path)
+{
+    const char *s = strrchr(path, '/');
+    const char *name = s ? s + 1 : path;
+    size_t n = strlen(name);
+    char *copy = malloc(n + 1);
+    if (copy)
+        memcpy(copy, name, n + 1);
+    return copy;
+}
+
+static char *strip_txt(char *name)
+{
+    size_t n = strlen(name);
+    if (n >= 4 && strcmp(name + n - 4, ".txt") == 0)
+        name[n - 4] = '\0';
+    return name;
+}
+
+static char *output_filename(const char *base)
+{
+    size_t n = strlen(base) + sizeof("_sharan_kunnel_suresh_251adb024.txt");
+    char *name = malloc(n);
+    if (!name)
+        return NULL;
+    snprintf(name, n, "%s_sharan_kunnel_suresh_251adb024.txt", base);
+    return name;
+}
