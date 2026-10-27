@@ -4,6 +4,8 @@
 // Resources used: 
 // AI (OpenAI ChatGPT, GPT-6): Prompt: 
 
+// standard and system headers https://en.cppreference.com/w/c/header
+// include the libraries
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -19,23 +21,23 @@ typedef struct{
     int is_float;
 
 }Value;
+
+// Parser tracks the input string, current position, line boundary and error position.
 typedef struct {
     const char *s;
     size_t pos, end, line_end;
     size_t error;
 } Parser;
 
+// https://en.cppreference.com/w/c/string/byte/isspace:: Skip whitespace btwn tokens. uses cctype library
 static void s_skipper(Parser *p){
-    while (p->pos < p->end &&
-           (p->s[p->pos] == ' ' ||
-            p->s[p->pos] == '\t' ||
-            p->s[p->pos] == '\r')) {
+    while (p->pos < p->end &&(p->s[p->pos] == ' ' || p->s[p->pos] == '\t' ||p->s[p->pos] == '\r')) {
         p->pos++;
     }
 }
 
-
-static Value int_value(long long x){
+// value fo int 
+static Value int_val(long long x){
     Value v;
     v.i=x;
     v.d=(double)x;
@@ -43,24 +45,24 @@ static Value int_value(long long x){
     return v;
 }
 
-// referred Chatgpt for this code snippet 
-static Value float_value(double x)
-{
+// referred Chatgpt for this code snippet  prompt give me a structure to declare it for float 
+static Value float_value(double x){
     Value v;
     v.i = 0;
     v.d = x;
     v.is_float = 1;
     return v;
 }
-
-static int fail_at(Parser *p, size_t pos)
-{
+//store the error position in one place
+static int fail_at(Parser *p, size_t pos){
     p->error = pos;
     return 0;
 }
 
 static int parse_expr(Parser *p, Value *out);
 // till here  
+// isdigit/isfinite references: https://en.cppreference.com/w/c/string/byte/isdigit
+// and https://en.cppreference.com/w/c/numeric/math/isfinite
 static int number_parser(Parser *p, Value *out)
 {
     size_t start;
@@ -77,9 +79,7 @@ static int number_parser(Parser *p, Value *out)
     if (!isdigit((unsigned char)p->s[p->pos]))
         return fail_at(p, p->pos + 1);
 
-    while (p->pos < p->end &&
-           isdigit((unsigned char)p->s[p->pos])) {
-        number = number * 10.0 + (p->s[p->pos] - '0');
+    while (p->pos < p->end &&isdigit((unsigned char)p->s[p->pos])) {number = number * 10.0 + (p->s[p->pos] - '0');
         before = 1;
         p->pos++;
     }
@@ -88,8 +88,7 @@ static int number_parser(Parser *p, Value *out)
         p->pos++;
 
         while (p->pos < p->end &&
-               isdigit((unsigned char)p->s[p->pos])) {
-            number += (p->s[p->pos] - '0') * fraction_scale;
+               isdigit((unsigned char)p->s[p->pos])) {number += (p->s[p->pos] - '0') * fraction_scale;
             fraction_scale *= 0.1;
             after = 1;
             p->pos++;
@@ -98,17 +97,14 @@ static int number_parser(Parser *p, Value *out)
         if (!before || !after)
             return fail_at(p, p->pos < p->end ? p->pos : p->line_end - 1);
 
-        if (p->pos < p->end &&
-            (p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
+        if (p->pos < p->end &&(p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
             return fail_at(p, p->pos + 1);
 
         if (!isfinite(number))
             return fail_at(p, start + 1);
-
         *out = float_value(number);
         return 1;
     }
-
     if (p->pos < p->end &&
         (p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
         return fail_at(p, p->pos + 1);
@@ -116,19 +112,16 @@ static int number_parser(Parser *p, Value *out)
     if (number > (double)LLONG_MAX)
         return fail_at(p, start + 1);
 
-    *out = int_value((long long)number);
+    *out = int_val((long long)number);
     return 1;
 }
 
 
-/*
- * Multiplication and division are grouped in parse_term().
- * This makes them bind more tightly than + and -.
- * This stage uses i arithmetic; parentheses and powers
- * will be added in later stages.
- */
+// Multiplication and division are grouped in parse_term().
+// Recursive-descent parsing uses one function per precedence level. Multiplication and
+// division are handled here, below exponentiation and above addition/subtraction.
 static int parse_primary(Parser *p, Value *out);
-static int parsein_power(Parser *p, Value *out);
+static int parsein_power(Parser *p, Value *out);//parsing funtion for calc power
 static int parse_term(Parser *p, Value *out){
     Value value;
 
@@ -166,9 +159,9 @@ static int parse_term(Parser *p, Value *out){
 
         if (!value.is_float && !right.is_float) {
             if (op == '*')
-                value = int_value(value.i * right.i);
+                value = int_val(value.i * right.i);
             else
-                value = int_value(value.i / right.i);
+                value = int_val(value.i / right.i);
         } else {
             double a = value.is_float ? value.d : (double)value.i;
             double b = right.is_float ? right.d : (double)right.i;
@@ -182,15 +175,9 @@ static int parse_term(Parser *p, Value *out){
     return 1;
 }
 
-/*
- * Addition and subtraction call parse_term(), so each multiplication
- * or division is evaluated before the surrounding + or - operation.
- * The loop also preserves left-to-right evaluation at this level.
- */
-static int parse_expr(Parser *p, Value *out)
-{
+//parse addition ands  ubtraction after parse_term() has handled higher-precedence operators.
+static int parse_expr(Parser *p, Value *out){
     Value value;
-
     if (!parse_term(p, &value))
         return 0;
 
@@ -220,12 +207,12 @@ static int parse_expr(Parser *p, Value *out)
                 if ((right.i > 0 && value.i > LLONG_MAX - right.i) ||
                     (right.i < 0 && value.i < LLONG_MIN - right.i))
                     return fail_at(p, op_pos + 1);
-                value = int_value(value.i + right.i);
+                value = int_val(value.i + right.i);
             } else {
                 if ((right.i < 0 && value.i > LLONG_MAX + right.i) ||
                     (right.i > 0 && value.i < LLONG_MIN + right.i))
                     return fail_at(p, op_pos + 1);
-                value = int_value(value.i - right.i);
+                value = int_val(value.i - right.i);
             }
         } else {
             double a = value.is_float ? value.d : (double)value.i;
@@ -266,6 +253,8 @@ static int parse_primary(Parser *p, Value *out){
 
 //adding the powerr function d
 //edited according to use "Value" 
+// pow() reference: https://en.cppreference.com/w/c/numeric/math/pow
+// AI assistance was used to reason through the recursive structure and adapt it to Value.
 static int parsein_power(Parser *p, Value  *out)
 {
     Value base, exponent;
@@ -295,7 +284,7 @@ static int parsein_power(Parser *p, Value  *out)
         long long result = 1;
         for (long long k = 0; k < exponent.i; k++)
             result *= base.i;
-        *out = int_value(result);
+        *out = int_val(result);
         return 1;
     }
 
@@ -308,6 +297,7 @@ static int parsein_power(Parser *p, Value  *out)
     return 1;
 }
 
+// Evaluate one line: ignore blank/comment lines, parse the expression, then reject leftover text.
 static int evaluate_line(const char *s,
                          size_t start,
                          size_t end,
@@ -410,6 +400,7 @@ static int append_text(Output *o, const char *s, size_t n){
     o->data[o->len] = '\0';
     return 1;
 }
+// Format integer and floating-point results differently before appending a newline.
 static int append_result(Output *o, Value v){
     char buf[128];
     int n;
@@ -420,19 +411,20 @@ static int append_result(Output *o, Value v){
     return n >= 0 && (size_t)n < sizeof buf &&
            append_text(o, buf, (size_t)n);
 }
-//used chatgpt
+//used chatgpt  assistance was used to review the flow and error-handling cases; file I/O reference:
+
 static int process_input(const char *path, const char *outpath)
 {
     FILE *in = fopen(path, "rb");
     if (!in) {
-        fprintf(stderr, "Cannot open input file: %s\n", path);
+        fprintf(stderr, "Cant open input file: %s\n", path);
         return 0;
     }
     size_t length = 0;
     char *s = read_file(in, &length);
     fclose(in);
     if (!s) {
-        fprintf(stderr, "Cannot read input file: %s\n", path);
+        fprintf(stderr, "Cantread input file: %s\n", path);
         return 0;
     }
 
@@ -457,7 +449,7 @@ static int process_input(const char *path, const char *outpath)
             break;
         }
         if (status == 1 && !append_result(&output, v)) {
-            fprintf(stderr, "Out of memory while storing results\n");
+            fprintf(stderr, "Out of memory\n");
             free(output.data);
             free(s);
             return 0;
@@ -496,7 +488,7 @@ static int process_input(const char *path, const char *outpath)
     free(s);
     return ok;
 }
-
+// POSIX directory/stat functions: https://pubs.opengroup.org/onlinepubs/9699919799/
 static int make_dir_if_needed(const char *path)
 {
     struct stat st;
@@ -523,7 +515,7 @@ static char *join_path(const char *a, const char *b)
     memcpy(p + at, b, nb + 1);
     return p;
 }
-
+// Copy the last path component so it can be used to create an output filename.
 static char *base_name(const char *path)
 {
     const char *s = strrchr(path, '/');
@@ -534,7 +526,7 @@ static char *base_name(const char *path)
         memcpy(copy, name, n + 1);
     return copy;
 }
-
+// Removes a a trailing .txt  before adding .
 static char *strip_txt(char *name)
 {
     size_t n = strlen(name);
@@ -552,7 +544,7 @@ static char *output_filename(const char *base)
     snprintf(name, n, "%s_sharan_kunnel_suresh_251adb024.txt", base);
     return name;
 }
-
+// argc/argv reference: https://www.gnu.org/software/libc/manual/html_node/Program-Arguments.html
 int main(int argc, char **argv)
 {
     const char *indir = NULL, *outdir = NULL, *input = NULL;
@@ -560,23 +552,23 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--dir") == 0) {
             if (i + 1 >= argc || indir || input) {
-                fprintf(stderr, "Invalid directory arguments\n");
+                fprintf(stderr, "invaliddirectory arguments\n");
                 return 1;
             }
             indir = argv[++i];
         } else if (strcmp(argv[i], "-o") == 0 ||
                    strcmp(argv[i], "--output-dir") == 0) {
             if (i + 1 >= argc || outdir) {
-                fprintf(stderr, "Invalid output directory arguments\n");
+                fprintf(stderr, "incInvalid output dir args\n");
                 return 1;
             }
             outdir = argv[++i];
         } else if (argv[i][0] == '-') {
-            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            fprintf(stderr, "unknown-option: %s\n", argv[i]);
             return 1;
         } else {
             if (input || indir) {
-                fprintf(stderr, "Specify either one input file or -d DIR\n");
+                fprintf(stderr, "specify either one input file or -d DIR\n");
                 return 1;
             }
             input = argv[i];
@@ -607,7 +599,7 @@ int main(int argc, char **argv)
             outdir = default_dir;
         }
         if (!make_dir_if_needed(outdir)) {
-            fprintf(stderr, "Cannot create or access output directory: %s\n", outdir);
+            fprintf(stderr, "cannot create oraccess output directory: %s\n", outdir);
             free(default_dir);
             free(base);
             return 1;
@@ -624,7 +616,7 @@ int main(int argc, char **argv)
 
     DIR *dir = opendir(indir);
     if (!dir) {
-        fprintf(stderr, "Cannot open input directory: %s\n", indir);
+        fprintf(stderr, "cannot open input directory: %s\n", indir);
         return 1;
     }
     char *dirbase = base_name(indir);
@@ -647,7 +639,7 @@ int main(int argc, char **argv)
         outdir = default_dir;
     }
     if (!make_dir_if_needed(outdir)) {
-        fprintf(stderr, "Cannot create or access output directory: %s\n", outdir);
+        fprintf(stderr, "cannotcreate or access output directory: %s\n", outdir);
         free(default_dir);
         free(dirbase);
         closedir(dir);
