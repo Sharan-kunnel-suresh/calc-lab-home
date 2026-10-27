@@ -401,6 +401,86 @@ static int append_result(Output *o, Value v){
     return n >= 0 && (size_t)n < sizeof buf &&
            append_text(o, buf, (size_t)n);
 }
+//used chatgpt
+static int process_input(const char *path, const char *outpath){
+    FILE *in =fopen(path,"rb");
+    if (!in){
+        fprintf(stderr,"Cannot open the input file;%s\n",path);
+        return 0;
+    }
+    size_t length=0;
+    char *text = read_file(in, &length);
+    fclose(in);
+    if (!text) {
+        fprintf(stderr, "Cannot read input file: %s\n", path);
+        return 0;
+    }
+    char *text = read_file(in, &length);
+    fclose(in);
+    if (!text) {
+        fprintf(stderr, "Cannot read input file: %s\n", path);
+        return 0;
+    }
+    Output output= {NULL,0,0};
+    size_t start=0;
+    size_t global_error=0;
+    while (start < length) {
+        size_t end = start;
+        while (end < length && text[end] != '\n')
+            end++;
+        size_t line_end = end + 1;
+        size_t content_end = end;
+        if (content_end > start && text[content_end - 1] == '\r')
+            content_end--;
+
+        Value v;
+        size_t error = 0;
+        int status = evaluate_line(text, start, content_end,
+                                   line_end, &v, &error);
+        if (status == 0) {
+            global_error = error;
+            break;
+        }
+        if (status == 1 && !append_result(&output, v)) {
+            fprintf(stderr, "Out of memory while storing results\n");
+            free(output.data);
+            free(text);
+            return 0;
+        }
+        start = end < length ? end + 1 : end;
+    }
+
+    if (global_error) {
+        char errbuf[64];
+        int n = snprintf(errbuf, sizeof errbuf, "ERROR:%zu\n", global_error);
+        output.len = 0;
+        if (n < 0 || (size_t)n >= sizeof errbuf ||
+            !append_text(&output, errbuf, (size_t)n)) {
+            free(output.data);
+            free(text);
+            fprintf(stderr, "Out of memory while storing error\n");
+            return 0;
+        }
+    }
+
+    FILE *out = fopen(outpath, "wb");
+    if (!out) {
+        fprintf(stderr, "Cannot write output file: %s\n", outpath);
+        free(output.data);
+        free(text);
+        return 0;
+    }
+    int ok = output.len == 0 ||
+             fwrite(output.data, 1, output.len, out) == output.len;
+    if (fclose(out) != 0)
+        ok = 0;
+    if (!ok)
+        fprintf(stderr, "Failed writing output file: %s\n", outpath);
+
+    free(output.data);
+    free(text);
+    return ok;
+}
 int main(int argc, char **argv)
 {
     if (argc != 2) {
