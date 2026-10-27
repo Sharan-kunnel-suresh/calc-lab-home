@@ -368,7 +368,29 @@ typedef struct{
     char *data;
     size_t len,cap
 }Output;
-static int append_text(Output *o, const char *s, size_t n)
+//Used Chatgpt
+static int append_text(Output *o, const char *s, size_t n){
+    if (n>(size_t)-1 - o->len - 1)
+        return 0;
+    size_t need =o->len + n + 1;
+    if (need > o->cap) {
+        size_t cap = o->cap ? o->cap : 256;
+        while (cap < need) {
+            if (cap > (size_t)-1 / 2)
+                return 0;
+            cap *= 2;
+        }
+        char *tmp = realloc(o->data, cap);
+        if (!tmp)
+            return 0;
+        o->data = tmp;
+        o->cap = cap;
+    }
+    memcpy(o->data + o->len, s, n);
+    o->len += n;
+    o->data[o->len] = '\0';
+    return 1
+}
 int main(int argc, char **argv)
 {
     if (argc != 2) {
