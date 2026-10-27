@@ -2,18 +2,20 @@
 // https://github.com/Sharan-kunnel-suresh/calc-lab-home
 // Compile with: gcc -O2 -Wall -Wextra -std=c17 -o calc calc.c -lm
 // Resources used: 
-// AI (OpenAI ChatGPT, GPT-6): Prompt: "Explain how to
-// implement a recursive-descent parser in C with operator
-// precedence and exact error positions."
-// Conversation history: [PASTE YOUR CHATGPT SHARE LINK HERE]
-// I used this explanation to understand the parser design;
-// I implemented and tested the code in this section myself.
+// AI (OpenAI ChatGPT, GPT-6): Prompt: 
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
+// Used chat gpt to research structure that is need ed to do float 
+typedef struct{
+    long long integer;
+    double floating;
+    int is_float;
+
+}Value;
 typedef struct {
     const char *text;
     size_t pos;
@@ -24,8 +26,7 @@ typedef struct {
     int missing_close;
 } Parser;
 
-static void skip_spaces(Parser *p)
-{
+static void s_skipper(Parser *p){
     while (p->pos < p->end &&
            (p->text[p->pos] == ' ' ||
             p->text[p->pos] == '\t' ||
@@ -34,9 +35,9 @@ static void skip_spaces(Parser *p)
     }
 }
 
-static int parse_number(Parser *p, long long *result)
+static int number_parser(Parser *p, long long *result)
 {
-    skip_spaces(p);
+    s_skipper(p);
 
     if (p->pos >= p->end ||
         !isdigit((unsigned char)p->text[p->pos])) {
@@ -66,17 +67,17 @@ static int parse_number(Parser *p, long long *result)
  * will be added in later stages.
  */
 static int parse_primary(Parser *p, long long *result);
-static int parse_power(Parser *p, long long *result);
+static int parsein_power(Parser *p, long long *result);
 static int parse_term(Parser *p, long long *result)
 {
     long long value;
 
-    if (!parse_power(p, &value)) {
+    if (!parsein_power(p, &value)) {
         return 0;
     }
 
     for (;;) {
-        skip_spaces(p);
+        s_skipper(p);
 
         if (p->pos >= p->end) {
             *result = value;
@@ -91,13 +92,13 @@ static int parse_term(Parser *p, long long *result)
         }
 
         p->pos++;
-        skip_spaces(p);
+        s_skipper(p);
 
         /* Division by zero is reported at the right operand. */
         size_t right_start = p->pos;
         long long right;
 
-        if (!parse_power(p, &right)) {
+        if (!parsein_power(p, &right)) {
             return 0;
         }
 
@@ -128,7 +129,7 @@ static int parse_expression(Parser *p, long long *result)
     }
 
     for (;;) {
-        skip_spaces(p);
+        s_skipper(p);
 
         if (p->pos >= p->end) {
             *result = value;
@@ -161,7 +162,7 @@ static int parse_expression(Parser *p, long long *result)
 }
 static int parse_primary(Parser *p, long long *result)
 {
-    skip_spaces(p);
+    s_skipper(p);
 
     if (p->pos >= p->end) {
         p->error_pos = p->line_end_pos;
@@ -175,7 +176,7 @@ static int parse_primary(Parser *p, long long *result)
             return 0;
         }
 
-        skip_spaces(p);
+        s_skipper(p);
 
         if (p->pos >= p->end) {
             p->error_pos = p->line_end_pos;
@@ -192,12 +193,12 @@ static int parse_primary(Parser *p, long long *result)
         return 1;
     }
 
-    return parse_number(p, result);
+    return number_parser(p, result);
 }
 
 
 //adding the powerr function d
-static int parse_power(Parser *p, long long *result)
+static int parsein_power(Parser *p, long long *result)
 {
     long long base;
 
@@ -205,7 +206,7 @@ static int parse_power(Parser *p, long long *result)
         return 0;
     }
 
-    skip_spaces(p);
+    s_skipper(p);
 
     if (p->pos + 1 >= p->end ||
         p->text[p->pos] != '*' ||
@@ -215,12 +216,12 @@ static int parse_power(Parser *p, long long *result)
     }
 
     p->pos += 2;
-    skip_spaces(p);
+    s_skipper(p);
 
     size_t exponent_start = p->pos;
     long long exponent;
 
-    if (!parse_power(p, &exponent)) {
+    if (!parsein_power(p, &exponent)) {
         return 0;
     }
 
@@ -248,7 +249,7 @@ static int evaluate_line(const char *text,
 {
     Parser p = {text, start, end, 0, line_end_pos, 0,0};
 
-    skip_spaces(&p);
+    s_skipper(&p);
 
     if (p.pos == p.end ||
         text[p.pos] == '#') {
@@ -259,7 +260,7 @@ static int evaluate_line(const char *text,
         *error_pos = p.error_pos;
         return 0;
     }
-    skip_spaces(&p);
+    s_skipper(&p);
 
     if (p.pos < p.end) {
         *error_pos = p.pos + 1;
