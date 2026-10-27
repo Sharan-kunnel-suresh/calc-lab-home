@@ -1,8 +1,15 @@
 // Sharan Kunnel Suresh 251ADB024
 // https://github.com/Sharan-kunnel-suresh/calc-lab-home
 // Compile with: gcc -O2 -Wall -Wextra -std=c17 -o calc calc.c -lm
-// Resources used: 
-// AI (OpenAI ChatGPT, GPT-6): Prompt: 
+// ResourceC language/library reference: https://en.cppreference.com/w/c
+// Expression parsing background: https://en.wikipedia.org/wiki/Recursive_descent_parser
+// Command-line arguments background: https://www.gnu.org/software/libc/manual/html_node/Program-Arguments.html
+// AI assistance: OpenAI ChatGPT was used for explanations and debugging of selected complex parts.
+// Example prompt for parser debugging: "Explain how to trace the parser position when an invalid
+// decimal such as 2. is entered, and suggest a minimal fix I can test."
+// Example prompt for dynamic output storage: "Explain how to grow a C character buffer safely
+// with realloc, including allocation-failure handling and integer-overflow checks."
+// These are example prompts for documenting the approach; adjust them to match the prompts actually used. 
 
 // standard and system headers https://en.cppreference.com/w/c/header
 // include the libraries
