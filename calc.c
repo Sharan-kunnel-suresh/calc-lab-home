@@ -10,10 +10,12 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <string.h>
+#include <limits.h>
 // Used chat gpt to research structure that is need ed to do float 
 typedef struct{
-    long long integer;
-    double floating;
+    long long i;
+    double d;
     int is_float;
 
 }Value;
@@ -63,59 +65,71 @@ static int number_parser(Parser *p, Value *out)
 {
     size_t start;
     int before = 0, after = 0;
-    long long integer = 0;
     double number = 0.0;
     double fraction_scale = 0.1;
-    s_skipper(p);
 
+    s_skipper(p);
     start = p->pos;
 
     if (p->pos >= p->end)
         return fail_at(p, p->line_end);
 
-    if (!isdigit((unsigned char)p->s[p->pos])) {
+    if (!isdigit((unsigned char)p->s[p->pos]))
         return fail_at(p, p->pos + 1);
-    }
 
     while (p->pos < p->end &&
            isdigit((unsigned char)p->s[p->pos])) {
-        int digit = p->s[p->pos] - '0';
+        number = number * 10.0 + (p->s[p->pos] - '0');
         before = 1;
-        number = number * 10.0 + (double)digit;
-        integer = integer * 10 + digit;
         p->pos++;
     }
 
     if (p->pos < p->end && p->s[p->pos] == '.') {
         p->pos++;
+
         while (p->pos < p->end &&
                isdigit((unsigned char)p->s[p->pos])) {
-            int digit = p->s[p->pos] - '0';
-            after = 1;
-            number += (double)digit * fraction_scale;
+            number += (p->s[p->pos] - '0') * fraction_scale;
             fraction_scale *= 0.1;
+            after = 1;
             p->pos++;
         }
+
         if (!before || !after)
-            return fail_at(p, p->pos < p->end ? p->pos : p->line_end);
+            return fail_at(p, p->pos < p->end ?
+                           p->pos + 1 : p->line_end);
+
         if (p->pos < p->end &&
             (p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
             return fail_at(p, p->pos + 1);
+
         if (!isfinite(number))
             return fail_at(p, start + 1);
+
         *out = float_value(number);
         return 1;
+    }
+
+    if (p->pos < p->end &&
+        (p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
+        return fail_at(p, p->pos + 1);
+
+    if (number > (double)LLONG_MAX)
+        return fail_at(p, start + 1);
+
+    *out = int_value((long long)number);
+    return 1;
 }
 
 
 /*
  * Multiplication and division are grouped in parse_term().
  * This makes them bind more tightly than + and -.
- * This stage uses integer arithmetic; parentheses and powers
+ * This stage uses i arithmetic; parentheses and powers
  * will be added in later stages.
  */
-static int parse_primary(Parser *p, long long *result);
-static int parsein_power(Parser *p, long long *result);
+static int parse_primary(Parser *p, Value *out);
+static int parsein_power(Parser *p, Value *out);
 static int parse_term(Parser *p, Value *out){
     Value value;
 
@@ -140,9 +154,9 @@ static int parse_term(Parser *p, Value *out){
             p->s[p->pos + 1] == '*')
             break;
         op_pos = p->pos++;
-        skip_space(p);
+        s_skipper(p);
         right_start = p->pos;
-        if (!parse_power(p, &right))
+        if (!parsein_power(p, &right))
             return 0;
 
         if (op == '/' &&
@@ -174,43 +188,54 @@ static int parse_term(Parser *p, Value *out){
  * or division is evaluated before the surrounding + or - operation.
  * The loop also preserves left-to-right evaluation at this level.
  */
-static int parse_expr(Parser *p, long long *result)
+static int parse_expr(Parser *p, Value *out)
 {
-    long long value;
+    Value value;
 
-    if (!parse_term(p, &value)) {
+    if (!parse_term(p, &value))
         return 0;
-    }
 
     for (;;) {
+        char op;
+        Value right;
+        size_t op_pos;
+
         s_skipper(p);
 
-        if (p->pos >= p->end) {
-            *result = value;
-            return 1;
-        }
-        char op = p->s[p->pos];
-        if (op == ')') {
-            *result = value;
+        if (p->pos >= p->end || p->s[p->pos] == ')') {
+            *out = value;
             return 1;
         }
 
-        if (op != '+' && op != '-') {
-            p->error_pos = p->pos + 1;
-            return 0;
-        }
-
+        op = p->s[p->pos];
+        if (op != '+' && op != '-')
+            return fail_at(p, p->pos + 1);
+        op_pos = p->pos;
         p->pos++;
 
-        long long right;
-        if (!parse_term(p, &right)) {
+        if (!parse_term(p, &right))
             return 0;
-        }
 
-        if (op == '+') {
-            value += right;
+        if (!value.is_float && !right.is_float) {
+            if (op == '+') {
+                if ((right.i > 0 && value.i > LLONG_MAX - right.i) ||
+                    (right.i < 0 && value.i < LLONG_MIN - right.i))
+                    return fail_at(p, op_pos + 1);
+                value = int_value(value.i + right.i);
+            } else {
+                if ((right.i < 0 && value.i > LLONG_MAX + right.i) ||
+                    (right.i > 0 && value.i < LLONG_MIN + right.i))
+                    return fail_at(p, op_pos + 1);
+                value = int_value(value.i - right.i);
+            }
         } else {
-            value -= right;
+            double a = value.is_float ? value.d : (double)value.i;
+            double b = right.is_float ? right.d : (double)right.i;
+            double r = op == '+' ? a + b : a - b;
+            if (!isfinite(r))
+                return fail_at(p, op_pos + 1);
+
+            value = float_value(r);
         }
     }
 }
@@ -222,13 +247,13 @@ static int parse_primary(Parser *p, Value *out){
 
     if (p->s[p->pos] == '(') {
         p->pos++;
-        skip_space(p);
+        s_skipper(p);
         if (p->pos < p->end && p->s[p->pos] == ')')
             return fail_at(p, p->pos + 1);
 
         if (!parse_expr(p, out))
             return 0;
-        skip_space(p);
+        s_skipper(p);
         if (p->pos >= p->end)
             return fail_at(p, p->line_end);
         if (p->s[p->pos] != ')')
@@ -236,7 +261,7 @@ static int parse_primary(Parser *p, Value *out){
         p->pos++;
         return 1;
     }
-    return parse_number(p, out);
+    return number_parser(p, out);
 }
 
 
@@ -249,7 +274,7 @@ static int parsein_power(Parser *p, Value  *out)
 
     if (!parse_primary(p, &base))
         return 0;
-    skip_space(p);
+    s_skipper(p);
     if (p->pos + 1 >= p->end ||
         p->s[p->pos] != '*' || p->s[p->pos + 1] != '*') {
         *out = base;
@@ -258,7 +283,7 @@ static int parsein_power(Parser *p, Value  *out)
 
     op_pos = p->pos;
     p->pos += 2;
-    skip_space(p);
+    s_skipper(p);
     size_t exponent_start = p->pos;
 
     if (!parsein_power(p, &exponent))
@@ -361,7 +386,7 @@ static char *read_file(FILE *file, size_t *length)
 }
 typedef struct{
     char *data;
-    size_t len,cap
+    size_t len,cap;
 }Output;
 //Used Chatgpt
 static int append_text(Output *o, const char *s, size_t n){
@@ -384,7 +409,7 @@ static int append_text(Output *o, const char *s, size_t n){
     memcpy(o->data + o->len, s, n);
     o->len += n;
     o->data[o->len] = '\0';
-    return 1
+    return 1;
 }
 static int append_result(Output *o, Value v){
     char buf[128];
