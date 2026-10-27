@@ -25,9 +25,9 @@ typedef struct {
 
 static void s_skipper(Parser *p){
     while (p->pos < p->end &&
-           (p->text[p->pos] == ' ' ||
-            p->text[p->pos] == '\t' ||
-            p->text[p->pos] == '\r')) {
+           (p->s[p->pos] == ' ' ||
+            p->s[p->pos] == '\t' ||
+            p->s[p->pos] == '\r')) {
         p->pos++;
     }
 }
@@ -36,16 +36,11 @@ static void s_skipper(Parser *p){
 static Value int_value(long long x){
     Value v;
     v.i=x;
-    v.is_float=0;
-    return v;
-}
-static Value int_value(long long x){
-    Value v;
-    v.i=x;
     v.d=(double)x;
     v.is_float=0;
     return v;
 }
+
 // referred Chatgpt for this code snippet 
 static Value float_value(double x)
 {
@@ -194,7 +189,7 @@ static int parse_expr(Parser *p, long long *result)
             *result = value;
             return 1;
         }
-        char op = p->text[p->pos];
+        char op = p->s[p->pos];
         if (op == ')') {
             *result = value;
             return 1;
@@ -289,13 +284,13 @@ static int parsein_power(Parser *p, Value  *out)
     return 1;
 }
 
-static int evaluate_line(const char *text,
+static int evaluate_line(const char *s,
                          size_t start,
                          size_t end,
                          size_t line_end,Value *result,size_t *error)
 {
     Parser p;
-    p.s = text;
+    p.s = s;
     p.pos = start;
     p.end = end;
     p.line_end = line_end;
@@ -410,9 +405,9 @@ static int process_input(const char *path, const char *outpath)
         return 0;
     }
     size_t length = 0;
-    char *text = read_file(in, &length);
+    char *s = read_file(in, &length);
     fclose(in);
-    if (!text) {
+    if (!s) {
         fprintf(stderr, "Cannot read input file: %s\n", path);
         return 0;
     }
@@ -422,16 +417,16 @@ static int process_input(const char *path, const char *outpath)
     size_t global_error = 0;
     while (start < length) {
         size_t end = start;
-        while (end < length && text[end] != '\n')
+        while (end < length && s[end] != '\n')
             end++;
         size_t line_end = end + 1;
         size_t content_end = end;
-        if (content_end > start && text[content_end - 1] == '\r')
+        if (content_end > start && s[content_end - 1] == '\r')
             content_end--;
 
         Value v;
         size_t error = 0;
-        int status = evaluate_line(text, start, content_end,
+        int status = evaluate_line(s, start, content_end,
                                    line_end, &v, &error);
         if (status == 0) {
             global_error = error;
@@ -440,7 +435,7 @@ static int process_input(const char *path, const char *outpath)
         if (status == 1 && !append_result(&output, v)) {
             fprintf(stderr, "Out of memory while storing results\n");
             free(output.data);
-            free(text);
+            free(s);
             return 0;
         }
         start = end < length ? end + 1 : end;
@@ -453,7 +448,7 @@ static int process_input(const char *path, const char *outpath)
         if (n < 0 || (size_t)n >= sizeof errbuf ||
             !append_text(&output, errbuf, (size_t)n)) {
             free(output.data);
-            free(text);
+            free(s);
             fprintf(stderr, "Out of memory while storing error\n");
             return 0;
         }
@@ -463,7 +458,7 @@ static int process_input(const char *path, const char *outpath)
     if (!out) {
         fprintf(stderr, "Cannot write output file: %s\n", outpath);
         free(output.data);
-        free(text);
+        free(s);
         return 0;
     }
     int ok = output.len == 0 ||
@@ -474,7 +469,7 @@ static int process_input(const char *path, const char *outpath)
         fprintf(stderr, "Failed writing output file: %s\n", outpath);
 
     free(output.data);
-    free(text);
+    free(s);
     return ok;
 }
 
@@ -532,4 +527,144 @@ static char *output_filename(const char *base)
         return NULL;
     snprintf(name, n, "%s_sharan_kunnel_suresh_251adb024.txt", base);
     return name;
+}
+
+int main(int argc, char **argv)
+{
+    const char *indir = NULL, *outdir = NULL, *input = NULL;
+    int i;
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--dir") == 0) {
+            if (i + 1 >= argc || indir || input) {
+                fprintf(stderr, "Invalid directory arguments\n");
+                return 1;
+            }
+            indir = argv[++i];
+        } else if (strcmp(argv[i], "-o") == 0 ||
+                   strcmp(argv[i], "--output-dir") == 0) {
+            if (i + 1 >= argc || outdir) {
+                fprintf(stderr, "Invalid output directory arguments\n");
+                return 1;
+            }
+            outdir = argv[++i];
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            return 1;
+        } else {
+            if (input || indir) {
+                fprintf(stderr, "Specify either one input file or -d DIR\n");
+                return 1;
+            }
+            input = argv[i];
+        }
+    }
+    if ((!input && !indir) || (input && indir)) {
+        fprintf(stderr, "Usage: calc [-d DIR | --dir DIR] [-o OUTDIR | --output-dir OUTDIR] [input.txt]\n");
+        return 1;
+    }
+
+    if (input) {
+        char *base = base_name(input);
+        if (!base) {
+            fprintf(stderr, "Out of memory\n");
+            return 1;
+        }
+        strip_txt(base);
+        char *default_dir = NULL;
+        if (!outdir) {
+            size_t n = strlen(base) + sizeof("_sharan_251adb024");
+            default_dir = malloc(n);
+            if (!default_dir) {
+                free(base);
+                fprintf(stderr, "Out of memory\n");
+                return 1;
+            }
+            snprintf(default_dir, n, "%s_sharan_251adb024", base);
+            outdir = default_dir;
+        }
+        if (!make_dir_if_needed(outdir)) {
+            fprintf(stderr, "Cannot create or access output directory: %s\n", outdir);
+            free(default_dir);
+            free(base);
+            return 1;
+        }
+        char *filename = output_filename(base);
+        char *outpath = filename ? join_path(outdir, filename) : NULL;
+        int ok = outpath && process_input(input, outpath);
+        free(outpath);
+        free(filename);
+        free(default_dir);
+        free(base);
+        return ok ? 0 : 1;
+    }
+
+    DIR *dir = opendir(indir);
+    if (!dir) {
+        fprintf(stderr, "Cannot open input directory: %s\n", indir);
+        return 1;
+    }
+    char *dirbase = base_name(indir);
+    if (!dirbase) {
+        closedir(dir);
+        fprintf(stderr, "Out of memory\n");
+        return 1;
+    }
+    char *default_dir = NULL;
+    if (!outdir) {
+        size_t n = strlen(dirbase) + sizeof("_sharan_251adb024");
+        default_dir = malloc(n);
+        if (!default_dir) {
+            free(dirbase);
+            closedir(dir);
+            fprintf(stderr, "Out of memory\n");
+            return 1;
+        }
+        snprintf(default_dir, n, "%s_sharan_251adb024", dirbase);
+        outdir = default_dir;
+    }
+    if (!make_dir_if_needed(outdir)) {
+        fprintf(stderr, "Cannot create or access output directory: %s\n", outdir);
+        free(default_dir);
+        free(dirbase);
+        closedir(dir);
+        return 1;
+    }
+
+    int ok = 1;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        size_t n = strlen(entry->d_name);
+        if (n < 4 || strcmp(entry->d_name + n - 4, ".txt") != 0)
+            continue;
+        char *inpath = join_path(indir, entry->d_name);
+        if (!inpath) {
+            ok = 0;
+            break;
+        }
+        struct stat entry_stat;
+        if (stat(inpath, &entry_stat) != 0 || !S_ISREG(entry_stat.st_mode)) {
+            free(inpath);
+            continue;
+        }
+        char *base = base_name(entry->d_name);
+        if (!base) {
+            free(inpath);
+            free(base);
+            ok = 0;
+            break;
+        }
+        strip_txt(base);
+        char *filename = output_filename(base);
+        char *outpath = filename ? join_path(outdir, filename) : NULL;
+        if (!outpath || !process_input(inpath, outpath))
+            ok = 0;
+        free(inpath);
+        free(base);
+        free(filename);
+        free(outpath);
+    }
+    closedir(dir);
+    free(default_dir);
+    free(dirbase);
+    return ok ? 0 : 1;
 }
