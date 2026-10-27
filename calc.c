@@ -134,40 +134,44 @@ static int parse_term(Parser *p, Value *out){
         Value right;
         s_skipper(p);
 
-        if (p->pos >= p->end) {
-            *result = value;
+        if (p->pos >= p->end || p->s[p->pos] == ')' ) {
+            *out = value;
             return 1;
         }
-
-        char op = p->text[p->pos];
-
-        if (op != '*' && op != '/') {
-            *result = value;
-            return 1;
-        }
-
-        p->pos++;
-        s_skipper(p);
-
-        /* Division by zero is reported at the right operand. */
-        size_t right_start = p->pos;
-        long long right;
-
-        if (!parsein_power(p, &right)) {
+        op = p->s[p->pos];
+        if (op != '*' && op != '/')
+            break;
+        if (p->pos + 1 < p->end && op == '*' &&
+            p->s[p->pos + 1] == '*')
+            break;
+        op_pos = p->pos++;
+        skip_space(p);
+        right_start = p->pos;
+        if (!parse_power(p, &right))
             return 0;
-        }
 
-        if (op == '/' && right == 0) {
-            p->error_pos = right_start + 1;
-            return 0;
-        }
+        if (op == '/' &&
+            ((!right.is_float && right.i == 0) ||
+             (right.is_float && right.d == 0.0)))
+            return fail_at(p, right_start < p->end ?
+                           right_start + 1 : p->line_end);
 
-        if (op == '*') {
-            value *= right;
+        if (!value.is_float && !right.is_float) {
+            if (op == '*')
+                value = int_value(value.i * right.i);
+            else
+                value = int_value(value.i / right.i);
         } else {
-            value /= right;
+            double a = value.is_float ? value.d : (double)value.i;
+            double b = right.is_float ? right.d : (double)right.i;
+            double r = op == '*' ? a * b : a / b;
+            if (!isfinite(r))
+                return fail_at(p, op_pos + 1);
+            value = float_value(r);
         }
     }
+    *out = value;
+    return 1;
 }
 
 /*
@@ -175,7 +179,7 @@ static int parse_term(Parser *p, Value *out){
  * or division is evaluated before the surrounding + or - operation.
  * The loop also preserves left-to-right evaluation at this level.
  */
-static int parse_expression(Parser *p, long long *result)
+static int parse_expr(Parser *p, long long *result)
 {
     long long value;
 
@@ -288,27 +292,28 @@ static int parsein_power(Parser *p, Value  *out)
 static int evaluate_line(const char *text,
                          size_t start,
                          size_t end,
-                         size_t line_end_pos,
-                         long long *result,
-                         size_t *error_pos)
+                         size_t line_end,Value *result,size_t *error)
 {
-    Parser p = {text, start, end, 0, line_end_pos, 0,0};
+    Parser p;
+    p.s = text;
+    p.pos = start;
+    p.end = end;
+    p.line_end = line_end;
+    p.error = 0;
 
     s_skipper(&p);
 
-    if (p.pos == p.end ||
-        text[p.pos] == '#') {
-        return 2; /* Blank or comment line. */
-    }
+    if (p.pos == p.end || p.s[p.pos] == '#')
+        return 2;
 
-    if (!parse_expression(&p, result)) {
-        *error_pos = p.error_pos;
+    if (!parse_expr(&p, result)) {
+        *error = p.error;
         return 0;
     }
     s_skipper(&p);
 
     if (p.pos < p.end) {
-        *error_pos = p.pos + 1;
+        *error = p.pos + 1;
         return 0;
     }
 
@@ -359,7 +364,11 @@ static char *read_file(FILE *file, size_t *length)
     *length = used;
     return buffer;
 }
-
+typedef struct{
+    char *data;
+    size_t len,cap
+}Output;
+static int append_text(Output *o, const char *s, size_t n)
 int main(int argc, char **argv)
 {
     if (argc != 2) {
