@@ -96,8 +96,7 @@ static int number_parser(Parser *p, Value *out)
         }
 
         if (!before || !after)
-            return fail_at(p, p->pos < p->end ?
-                           p->pos + 1 : p->line_end);
+            return fail_at(p, p->pos < p->end ? p->pos : p->line_end - 1);
 
         if (p->pos < p->end &&
             (p->s[p->pos] == 'e' || p->s[p->pos] == 'E'))
